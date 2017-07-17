@@ -1,0 +1,9 @@
+# prorject specific files
+*.pyc
+
+# OS X specific
+.DS_Store
+*.sublime-*
+
+# ipython
+.ipynb_checkpoints

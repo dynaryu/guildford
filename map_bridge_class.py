@@ -116,4 +116,25 @@ def mapping_hazus_class(row):
 
 bridge['HAZUS_Road_Bridge_Class'] = bridge.apply(mapping_hazus_class, axis=1)  
 
+# create bridgedb_perth.csv
+# BID,LATITUDE,LONGITUDE,STRUCTURE_CLASSIFICATION,STRUCTURE_CATEGORY,SKEW,SPAN,SITE_CLASS
 
+a = pd.read_csv('../input/Guildford_study_bridge_exposure.csv')
+a['STRUCTURE_CATEGORY'] = 'BRIDGE'
+
+site_class = pd.read_csv('../input/XYbridge_par_siteclass.csv')
+
+id_to_site_class = []
+for _id, item in a.iterrows():
+	lat, lon = item['Lattitude'], item['Longitude']
+
+	idx = np.argmin((site_class['LATITUDE']-lat)**2 + (site_class['LONGITUDE']-lon)**2)
+
+	id_to_site_class.append(idx)
+	print('{}:{}'.format(lat, site_class.loc[idx, 'LATITUDE']))
+	print('{}:{}'.format(lon, site_class.loc[idx, 'LONGITUDE']))
+
+
+a['SITE_CLASS'] = site_class.loc[id_to_site_class, 'SITECLASS']
+
+a[['Strucutre No', u'Lattitude', u'Longitude', u'HAZUS_Road_Bridge_Class', 'STRUCTURE_CATEGORY', u'Skew Angle', u'Spans', 'SITE_CLASS']].to_csv('../input/bridgedb_perth.csv')

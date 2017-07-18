@@ -224,13 +224,13 @@ def compute_vulnerability(row):
     flag_pre = 'Pre' in row['BLDG_CLASS']
 
     # correction of vulnerability suggested by Mark
-    if row['mmi'] < 5.5:
+    if row['MMI'] < 5.5:
         prob55 = inv_logit(compute_mu(5.5,
                            flag_timber=flag_timber,
                            flag_pre=flag_pre))
-        return np.interp(row['mmi'], [4.0, 5.5], [0.0, prob55], left=0.0)
+        return np.interp(row['MMI'], [4.0, 5.5], [0.0, prob55], left=0.0)
     else:
-        mu = compute_mu(row['mmi'],
+        mu = compute_mu(row['MMI'],
                         flag_timber=flag_timber,
                         flag_pre=flag_pre)
         return inv_logit(mu)
@@ -302,9 +302,9 @@ convert_to_float('1788 - 1939')
 convert_to_float('Unknown') is None
 """
 
-def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample=1000):
+def main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_path, nsample=10):
 
-    path_gm = os.path.join(gm_path, '{}_motion'.format(site_tag))
+    gm_path = os.path.join(pdir, project_tag, gm_tag)
 
     # read sitedb data 
     site = pd.read_csv(site_csv_file)
@@ -346,8 +346,8 @@ def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample
     """
 
     # ground motion
-    soil = np.load(os.path.join(path_gm, 'soil_SA.npy'))
-    periods = np.load(os.path.join(path_gm, 'atten_periods.npy'))
+    soil = np.load(os.path.join(gm_path, '{}_motion'.format(site_tag), 'soil_SA.npy'))
+    # periods = np.load(os.path.join(gm_path, '{}_motion'.format(site_tag), 'atten_periods.npy'))
 
     """
     # In[80]:
@@ -377,7 +377,7 @@ def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample
     # mmi_by_AK_from_SA03 = rsa2mmi_array(SA03, period=0.3)
     # mmi_by_AK_from_SA03.min(), mmi_by_AK_from_SA03.max()
 
-    site['mmi'] = mmi_by_worden_from_SA03
+    site['MMI'] = mmi_by_worden_from_SA03
 
     """
     # In[92]:
@@ -425,8 +425,15 @@ def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample
 
 
     # In[125]:
-    site['loss_ratio'] = site.apply(compute_vulnerability, axis=1)
+    site['LOSS_RATIO'] = site.apply(compute_vulnerability, axis=1)
 
+    grouped = site.groupby('SA1_CODE')
+    mean_loss_ratio_by_SA1 = grouped['LOSS_RATIO'].mean()
+    mean_loss_ratio_by_SA1.fillna(0, inplace=True)
+    mean_loss_ratio_by_SA1.columns = ['SA1_CODE', 'LOSS_RATIO']
+    file_ = os.path.join(output_path,'mean_loss_ratio_by_SA1.csv')
+    mean_loss_ratio_by_SA1.to_csv(file_)
+    print('{} is created'.format(file_))
 
     # In[127]:
     # site['loss_ratio'].groupby(pd.cut(site['loss_ratio'], np.arange(0, 0.4, 0.05))).count()
@@ -445,7 +452,7 @@ def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample
 
     np.random.seed(99)
     # np.array(nsample, nbldgs)
-    sampled = sample_vulnerability(site['loss_ratio'].values, nsample=nsample, cov=cov)
+    sampled = sample_vulnerability(site['LOSS_RATIO'].values, nsample=nsample, cov=cov)
 
 
     # In[154]:
@@ -467,7 +474,7 @@ def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample
 
     # no. of people replaced (loss ratio > 0.25)
     no_replaced_total = np.dot(sampled > 0.25, site['POPULATION'].values).mean()
-    print("no_replaced_total is {:.0f}".format(no_replaced_total))
+    print('no_replaced_total is {:.0f}'.format(no_replaced_total))
 
     # assign damage state
     damage_labels = ['no', 'slight', 'moderate', 'extensive', 'complete']
@@ -493,7 +500,7 @@ def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample
 
     file_ = os.path.join(output_path, 'bldg_dmg_count.csv')
     bldg_dmg_count.to_csv(file_)
-    print("{} is created".format(file_))
+    print('{} is created'.format(file_))
 
     # bldg_dmg_count by suburb
     sub = site['SUBURB'].unique().tolist()
@@ -505,7 +512,7 @@ def main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample
 
     file_ = os.path.join(output_path, 'bldg_dmg_count_by_sub.csv')
     bldg_dmg_count_by_sub.to_csv(file_)
-    print("%s is created" %file_)
+    print('{} is created'.format(file_))
 
     # assign casualty rate by damage state
     # casualty{'Severity'}.DataFrame
@@ -543,12 +550,14 @@ if __name__ == '__main__':
 
     # environment
     pdir = '/Users/hyeuk/Projects'
-    gm_path = os.path.join(pdir, 'scenario_Guildford', 'gm_res_bldg_Mw5.6D7')
+    project_tag = 'scenario_Guildford'
     site_tag = 'perth_res_bldg'
-    site_csv_file = os.path.join(pdir, 'scenario_Guildford/input',
+    gm_tag = 'gm_res_bldg_Mw5.6D7'
+   
+    site_csv_file = os.path.join(pdir, project_tag, 'input',
                                  'Perth_Residential_Earthquake_Exposure_201607_EQRM.csv')
     hazus_data_path = os.path.join(pdir, 'scenario_Sydney/data/hazus')
-    output_path = os.path.join(pdir, 'scenario_Guildford', 'residential')
+    output_path = os.path.join(pdir, project_tag, 'residential')
 
-    main(gm_path, site_tag, site_csv_file, hazus_data_path, output_path, nsample=10)
+    main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_path, nsample=10)
 

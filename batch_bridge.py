@@ -195,7 +195,12 @@ def main(pdir, project_tag, site_tag, gm_tag, nsample=1000):
 if __name__ == '__main__':
 
     # environment
-    pdir = '/Users/hyeuk/Projects'
+    import sys
+    if sys.platform == 'darwin':
+        pdir = '/Users/hyeuk/Projects'
+    else:
+        pdir = '/nas/users/u65242/unix/Projects'
+
     project_tag = 'scenario_Guildford'
     site_tag = 'perth'
     gm_tag = 'bridge_Mw5.6D7'

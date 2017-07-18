@@ -322,7 +322,12 @@ def main(pdir, project_tag, site_tag, gm_tag, site_csv_file, path_vul, output_pa
 if __name__ == '__main__':
 
     # environment
-    pdir = '/Users/hyeuk/Projects'
+    import sys
+    if sys.platform == 'darwin':
+        pdir = '/Users/hyeuk/Projects'
+    else:
+        pdir = '/nas/users/u65242/unix/Projects'
+        
     project_tag = 'scenario_Guildford'
     site_tag = 'perth_non_res_bldg'
     gm_tag = 'gm_non_res_bldg_Mw5.6D7'

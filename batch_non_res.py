@@ -21,10 +21,6 @@ pylab.rcParams['font.size'] = 12
 pylab.rcParams['legend.numpoints'] = 1
 """
 
-# In[3]:
-
-working_path = os.path.join(os.path.expanduser("~"),'Projects/eq_victoria')
-
 
 # In[78]:
 
@@ -327,7 +323,7 @@ if __name__ == '__main__':
         pdir = '/Users/hyeuk/Projects'
     else:
         pdir = '/nas/users/u65242/unix/Projects'
-        
+
     project_tag = 'scenario_Guildford'
     site_tag = 'perth_non_res_bldg'
     gm_tag = 'gm_non_res_bldg_Mw5.6D7'

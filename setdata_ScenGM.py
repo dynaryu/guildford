@@ -27,8 +27,8 @@ is_scenario = True
 #site_tag = "mel_soil" # portfolio
 #site_tag = "mel" # grid
 #site_tag = "perth_res_bldg" # portfolio
-site_tag = "perth_non_res_bldg" # portfolio
-#site_tag = "mel_em_hospital" # portfolio
+#site_tag = "perth_non_res_bldg" # portfolio
+site_tag = "perth_school" # portfolio
 #site_tag = "Guildford" # portfolio
 site_db_tag = ""
 
@@ -38,7 +38,8 @@ input_dir = join(working_path, 'input')
 # ground motion field (rock, soil) of Mw5.0 event
 #output_dir = join(working_path, 'gm_Mw5.6D7_AT')
 # output_dir = join(working_path, 'gm_em_hospital_Mw5.2D10')
-output_dir = join(working_path, 'gm_non_res_bldg_Mw5.6D7')
+# output_dir = join(working_path, 'gm_non_res_bldg_Mw5.6D7')
+output_dir = join(working_path, 'gm_school_Mw5.6D7')
 #output_dir = join(working_path, 'gm_res_bldg_Mw5.6D7')
 # ground motion field (soil) of Mw5.0 event for portfolio
 # output_dir = join(working_path, 'gm_portfolio_Mw5.0')

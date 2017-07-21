@@ -5,45 +5,68 @@ import pandas as pd
 import simplekml
 
 
-df = pd.read_csv('./input/Guildford_res.csv')
+#df = pd.read_csv('./input/Guildford_res.csv')
 
-icon_scale_value  = 0.5
+df = pd.read_csv('../bridge_Mw5.6D7/result_pe.csv')
+icon_scale_value  = 0.70
+
+# top 10
+id_top10 = df['pe_slight'].argsort()[::-1][:10].tolist()
 
 # point kml
 kml = simplekml.Kml()
 
 schema = kml.newschema()
-list_ = ['BID', 'YEAR_BUILT', 'HAZUS_STRUCTURE_CLASSIFICATION']
+list_ = ['BID', 'STRUCTURE_CLASSIFICATION', 'SPAN', 'SKEW', 'SA03', 'SA10', 'pe_slight', 'pe_moderate', 'pe_extensive', 'pe_complete']
+
+to_float = ['SKEW', 'SA03', 'SA10', 'pe_slight', 'pe_moderate', 'pe_extensive', 'pe_complete']
 
 for item in list_:
-    if df[item].dtype == 'object':
+    if item in to_float:
+       schema.newgxsimplearrayfield(name=item,
+                                    type=simplekml.Types.float,
+                                    displayname=item)
+    else:
         schema.newgxsimplearrayfield(name=item,
                                      type=simplekml.Types.string,
                                      displayname=item)
-    else:
-        schema.newgxsimplearrayfield(name=item,
-                                     type=simplekml.Types.float,
-                                     displayname=item)
 
-style = simplekml.Style()
-style.labelstyle.color = 00000000  # Make the text red
-style.labelstyle.scale = 0.000000  # Make the text twice as big
-style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/target.png'
-style.iconstyle.scale = icon_scale_value
+style1 = simplekml.Style()
+style1.labelstyle.color = 00000000  # Make the text red
+style1.labelstyle.scale = 0.000000  # Make the text twice as big
+style1.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/target.png'
+style1.iconstyle.scale = icon_scale_value
+
+style2 = simplekml.Style()
+style1.labelstyle.color = 00000000  # Make the text red
+style2.labelstyle.scale = 0.000000  # Make the text twice as big
+style2.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/target.png'
+style2.iconstyle.scale = icon_scale_value
+style2.iconstyle.color = 'ff00ffff'
+
 
 for irow, row in df.iterrows():  # Generate latitude values
-    print irow
+
     pnt = kml.newpoint(name='{}'.format(irow))
     pnt.coords = [(row['LONGITUDE'], row['LATITUDE'])]
-    pnt.style = style
+
+    if irow in id_top10:
+        pnt.style = style2
+    else:
+        pnt.style = style1
 
     #for item, flag in zip(list_, row.notnull()):
     #    if flag:
     for item in list_:
-        pnt.extendeddata.schemadata.newsimpledata(item, row[item]) # Ditto
+
+        if item in to_float:
+            pnt.extendeddata.schemadata.newsimpledata(item, '{:.2f}'.format(row[item])) # Ditto
+        else:
+            pnt.extendeddata.schemadata.newsimpledata(item, row[item]) # Ditto
 
 output_path = './'
-output_file = os.path.join(output_path, 'residential.kml')
+#output_file = os.path.join(output_path, 'residential.kml')
+output_file = os.path.join(output_path, 'bridge_damage.kml')
 kml.save(output_file)
 print '{} is generated'.format(output_file)
 

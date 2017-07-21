@@ -18,7 +18,27 @@ pylab.rcParams['figure.figsize'] = (10.0, 8.0)
 pylab.rcParams['legend.numpoints'] = 1
 """
 
-def assign_casualty(df_damage, casualty_rate):
+def summary_by_keyword(site, df_damage, damage_labels, key, file_name=None):
+
+    try:
+        _group_list = site[key].unique().tolist()
+    except KeyError:
+        print('invalid key: {}'.format(key))
+
+    _df = pd.DataFrame(0.0, columns=_group_list, index=range(1, len(damage_labels) + 2))
+
+    for _str, _grouped in site.groupby(key):
+        #print bldg_str, grouped.shape
+        _df[_str] = df_damage.ix[_grouped.index, :].apply(pd.value_counts, axis=0).fillna(0.0).mean(axis=1)
+
+    if file_name:
+        _file = os.path.join(output_path, '{}.csv'.format(file_name))
+        _df.to_csv(_file)
+        print('{} is created'.format(_file))
+
+    return _df
+
+def assign_casualty(site, df_damage, casualty_rate):
     """
     assign casualty rate for each building by building type
     """
@@ -28,12 +48,12 @@ def assign_casualty(df_damage, casualty_rate):
 
         df_casualty = pd.DataFrame(df_damage.values)
 
-        for bldg, group in df_casualty.groupby(df_casualty.shape[1]-1):
+        for bldg, group in site.groupby('BLDG_CLASS'):
 
             # print "%s: %s" % (severity, bldg)
             # replace_dic = casualty_rate[severity][bldg]
             for ids, ds in enumerate(casualty_rate.items, start=1):
-                df_casualty[group == ids] = casualty_rate.loc[ds, bldg, severity]
+                df_casualty[df_casualty.ix[group.index] == ids] = casualty_rate.loc[ds, bldg, severity]
 
                 #df_casualty.loc[group==ds] = replace_dic[ds]
                 #df_casualty.where(group==ds, replace_dic[ds], inplace=True)
@@ -93,7 +113,7 @@ def read_hazus_casualty_data(hazus_data_path, selected_bldg_class=None):
     return casualty_rate[list_ds] # re-order the item
 
 
-def assign_damage_state(data, sample, collapse_rate, damage_thresholds):
+def assign_damage_state(site, sample, collapse_rate, damage_thresholds):
     """
     assign damage state given damage state thresholds
 
@@ -101,7 +121,7 @@ def assign_damage_state(data, sample, collapse_rate, damage_thresholds):
 
     df_damage = np.digitize(np.transpose(sample), damage_thresholds)
     df_damage = pd.DataFrame(df_damage)
-    df_damage['BLDG_CLASS'] = data['BLDG_CLASS']
+    # df_damage['BLDG_CLASS'] = data['BLDG_CLASS']
 
     # df_damage = pd.DataFrame(index=data.index, columns=range(nsample))
 
@@ -113,12 +133,12 @@ def assign_damage_state(data, sample, collapse_rate, damage_thresholds):
 
 
     # assign collapse
-    for name, group in df_damage.groupby('BLDG_CLASS'):
+    for name, group in site.groupby('BLDG_CLASS'):
 
         prob_collapse = collapse_rate[name]*1.0e-2
 
         idx_group = group.index
-        group_array = group.values[:, :-1]
+        group_array = df_damage.ix[idx_group, :]
 
         (idx_complete, idy_complete) = np.where(group_array == 5) # complte
         ncomplete = len(idx_complete)
@@ -333,6 +353,7 @@ def main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_pat
 
     # BLDG_CLASS added
     site['BLDG_CLASS'] = site.apply(assign_res_class, axis=1)
+    bldg_types = site['BLDG_CLASS'].unique()
 
 
     """
@@ -424,16 +445,38 @@ def main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_pat
     # site['mmi'].groupby(pd.cut(site['mmi'], np.arange(3.0, 8.5, 0.5))).count()
 
 
+    # bldg counts by BLDG type and MMI (0.5 interval)
+    mmi_interval = np.arange(3.25, 9.0, 0.5)
+    bldg_exposed_by_mmi = pd.DataFrame(0.0, columns=bldg_types,
+                                       index=np.arange(3.5, 9.0, 0.5))
+    for bldg_str, grouped in site.groupby(['BLDG_CLASS']):
+        #print bldg_str, grouped.shape
+        temp = grouped['MMI'].groupby(pd.cut(grouped['MMI'], mmi_interval)).count()
+        temp.index = np.arange(3.5, 9.0, 0.5)
+        bldg_exposed_by_mmi[bldg_str] = temp
+
+    file_ = os.path.join(output_path, 'bldg_exposed_by_mmi.csv')
+    bldg_exposed_by_mmi.to_csv(file_)
+    print('{} is created'.format(file_))
+
     # In[125]:
     site['LOSS_RATIO'] = site.apply(compute_vulnerability, axis=1)
+    site['REPL_COST'] = site['FLOOR_AREA']*(site['CONTENTS_C']+site['BUILDING_C'])
+    site['REPAIR_COST'] = site['LOSS_RATIO'] * site['REPL_COST']
 
+    # LOSS_RATIO by SA1
     grouped = site.groupby('SA1_CODE')
-    mean_loss_ratio_by_SA1 = grouped['LOSS_RATIO'].mean()
-    mean_loss_ratio_by_SA1.fillna(0, inplace=True)
-    mean_loss_ratio_by_SA1.columns = ['SA1_CODE', 'LOSS_RATIO']
+    mean_loss_ratio_by_SA1 = grouped['REPAIR_COST'].sum()/grouped['REPL_COST'].sum()
+    mean_loss_ratio_by_SA1.name = 'MEAN_LOSS_RATIO'
+    # mean_loss_ratio_by_SA1.fillna(0, inplace=True)
     file_ = os.path.join(output_path,'mean_loss_ratio_by_SA1.csv')
-    mean_loss_ratio_by_SA1.to_csv(file_)
+    mean_loss_ratio_by_SA1.to_csv(file_, index_label='SA1_CODE', header=True, float_format='%.4f')
     print('{} is created'.format(file_))
+
+    # LOSS_RATIO by SUBURB
+    grouped = site.groupby('SUBURB')
+    mean_loss_ratio_by_suburb = grouped['REPAIR_COST'].sum()/grouped['REPL_COST'].sum()
+    # mean_loss_ratio_by_SA1.fillna(0, inplace=True)
 
     # In[127]:
     # site['loss_ratio'].groupby(pd.cut(site['loss_ratio'], np.arange(0, 0.4, 0.05))).count()
@@ -479,7 +522,6 @@ def main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_pat
     # assign damage state
     damage_labels = ['no', 'slight', 'moderate', 'extensive', 'complete']
     damage_thresholds = [-1.0, 0.02, 0.1, 0.5, 0.8, 1.1]
-    bldg_types = site['BLDG_CLASS'].unique()
 
     # fatality estimate
     # read hazus indoor casualty data
@@ -492,23 +534,13 @@ def main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_pat
 
     df_damage = assign_damage_state(site, sampled, collapse_rate, damage_thresholds)
 
-    bldg_dmg_count = pd.DataFrame(0.0, columns=bldg_types,
-                                  index=range(1, len(damage_labels) + 2))
-    for bldg_str, grouped in df_damage.groupby(['BLDG_CLASS']):
-        #print bldg_str, grouped.shape
-        bldg_dmg_count[bldg_str] = grouped.apply(pd.value_counts, axis=0).fillna(0.0).mean(axis=1)
-
-    file_ = os.path.join(output_path, 'bldg_dmg_count.csv')
-    bldg_dmg_count.to_csv(file_)
-    print('{} is created'.format(file_))
+    _ = summary_by_keyword(site, df_damage, damage_labels, 'BLDG_CLASS', 'bldg_dmg_count_by_type')
 
     # bldg_dmg_count by suburb
-    sub = site['SUBURB'].unique().tolist()
-    bldg_dmg_count_by_sub = pd.DataFrame(0.0, columns=sub,
-                                         index=range(1, len(damage_labels) + 2))
-    for sub_str, grouped in site.groupby('SUBURB'):
-        #print sub_str, grouped.shape
-        bldg_dmg_count_by_sub[sub_str] = df_damage.ix[grouped.index].apply(pd.value_counts, axis=0).fillna(0.0).mean(axis=1)
+    bldg_dmg_count_by_sub = summary_by_keyword(site, df_damage, damage_labels, 'SUBURB', file_name=None)
+    bldg_dmg_count_by_sub = bldg_dmg_count_by_sub.T
+    bldg_dmg_count_by_sub['NO_BLDGS'] = site.groupby('SUBURB')['SUBURB'].count()    
+    bldg_dmg_count_by_sub['LOSS_RATIO'] = mean_loss_ratio_by_suburb
 
     file_ = os.path.join(output_path, 'bldg_dmg_count_by_sub.csv')
     bldg_dmg_count_by_sub.to_csv(file_)
@@ -516,7 +548,8 @@ def main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_pat
 
     # assign casualty rate by damage state
     # casualty{'Severity'}.DataFrame
-    casualty = assign_casualty(df_damage, casualty_rate)
+    casualty = assign_casualty(site, df_damage, casualty_rate)
+    print('casualty rate is assigned')
 
     # save casualty
     # for severity in casualty.keys():
@@ -524,22 +557,38 @@ def main(pdir, project_tag, site_tag, site_csv_file, hazus_data_path, output_pat
     #     casualty[severity].to_csv(file_, index=False)
     #     print "%s is created" % file_
 
+    sub = site['SUBURB'].unique().tolist()
+    sa1 = site['SA1_CODE'].unique().tolist()
+
     # multiply casualty with population
     casualty_number = pd.DataFrame(index=range(nsample),
                                    columns=casualty_rate.minor_axis)
     casualty_by_sub = pd.DataFrame(index=casualty_rate.minor_axis, 
                                    columns=sub)
+    casualty_by_sa1 = pd.DataFrame(index=casualty_rate.minor_axis, 
+                                   columns=sa1)
+
     for severity in casualty_rate.minor_axis:
-        value_ = 0.01*casualty[severity][range(nsample)].multiply(site['POPULATION'], axis=0)
+        value_ = 0.01*casualty[severity].multiply(site['POPULATION'], axis=0)
         casualty_number.loc[:, severity] = value_.sum(axis=0)
 
         for sub_str, grouped in site.groupby('SUBURB'):
             #print sub_str, grouped.shape
+            # casualty_by_sub.loc[severity, sub_str] = value_.ix[grouped.index].sum(axis=0).mean()
             casualty_by_sub.loc[severity, sub_str] = value_.ix[grouped.index].sum(axis=0).mean()
     # print casualty_number.mean(axis=0)
 
+        for sub_str, grouped in site.groupby('SA1_CODE'):
+            #print sub_str, grouped.shape
+            # casualty_by_sub.loc[severity, sub_str] = value_.ix[grouped.index].sum(axis=0).mean()
+            casualty_by_sa1.loc[severity, sub_str] = value_.ix[grouped.index].sum(axis=0).mean()
+
     file_ = os.path.join(output_path, 'casualty_by_sub.csv')
     casualty_by_sub.to_csv(file_, index=False)
+    print('{} is created'.format(file_))
+
+    file_ = os.path.join(output_path, 'casualty_by_sa1.csv')
+    casualty_by_sa1.to_csv(file_, index=False)
     print('{} is created'.format(file_))
 
     file_ = os.path.join(output_path, 'casualty_number.csv')
